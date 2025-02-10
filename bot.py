@@ -18,8 +18,8 @@ logging.basicConfig(
 
 
 # Inizializza il database SQLite
-def init_db():
-    conn = sqlite3.connect("ordini.db")
+def init_db(db):
+    conn = sqlite3.connect(db)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -66,9 +66,11 @@ def main():
     global order_db
     order_db = args.order
 
+    init_db(order_db)
+
     application = ApplicationBuilder().token(api_token).build()
-    hanlder =  TypeHandler(Update, Callback)
-    application.add_handler(handler, -1)
+   # hanlder =  TypeHandler(Update, callback)
+   # application.add_handler(handler, -1)
 
 
     application.run_polling()
