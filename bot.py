@@ -30,10 +30,18 @@ class DatabaseManager:
         if self.conn:
             self.conn.close()
 
-    def execute_fetchall(self, query, params=()):
+    def execute_query(self, query, params=(), fetch_one = False, auto_commit = True):
         try:
             self.cursor.execute(query, params)
-            return self.cursor.fetchall()
+            if fetch_one:
+                query_result = self.cursor.fetchone()
+            else:
+                query_result = self.cursor.fetchall()
+
+            if auto_commit and not query.lower().startswith("select"):
+                self.commit()
+
+            return query_result
         except sqlite3.Error as e:
             print(f"SQLite error: {e}")
             return None
@@ -54,7 +62,7 @@ class DatabaseManager:
 
 # Inizializza il database SQLite
 def init_db(db):
-    with DatabaseManager("orders.db") as db_manager:
+    with DatabaseManager(db) as db_manager:
         query_create = """
         CREATE TABLE IF NOT EXISTS session (
         id TEXT PRIMARY KEY,
@@ -79,11 +87,8 @@ def init_db(db):
 async def new_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session_id = str(random.randint(10000, 99999))
 
-    conn = sqlite3.connect(db)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO session (id) VALUES (?)", (session_id,))
-    conn.commit()
-    conn.close()
+    with DatabaseManager(db) as db_manager:
+        db_manager.execute_query("INSERT INTO session (id) VALUES (?)", (session_id,))
 
     await update.message.reply_text(f"New session created! Session ID: {session_id}")
 
@@ -97,62 +102,48 @@ async def new_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     plate, quantity = map(int, msg)
     user = update.message.from_user.username
 
-    conn = sqlite3.connect(db)
-    cursor = conn.cursor()
+    with DatabaseManager(db) as db_manager:
+        session = db_manager.execute_query("SELECT id FROM session WHERE active = 1 ORDER BY id DESC LIMIT 1",
+                                fetch_one = True)
+        if not session:
+            await update.message.reply_text("No active sessione. Wait for a new session")
+            return
 
-    cursor.execute("SELECT id FROM session WHERE active = 1 ORDER BY id DESC LIMIT 1")
-    session = cursor.fetchone()
-    if not session:
-        await update.message.reply_text("No active sessione. Wait for a new session")
-        conn.close()
-        return
-
-    session_id = session[0]
-    cursor.execute("""
+        session_id = session[0]
+        db_manager.execute_query("""
         INSERT INTO orders (session_id, user, plate, quantity)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(session_id, user, plate) DO UPDATE SET quantity = quantity + ?
     """, (session_id, user, plate, quantity, quantity))
 
-    conn.commit()
-    conn.close()
-
-    await update.message.reply_text(f"Order saved for plate n. {plate}")
+        await update.message.reply_text(f"Order saved for plate n. {plate}")
 
 async def close_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    conn = sqlite3.connect(db)
-    cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM session WHERE active = 1 ORDER BY id DESC LIMIT 1")
-    session = cursor.fetchone()
+    with DatabaseManager(db) as db_manager:
+        session = db_manager.execute_query("SELECT id FROM session WHERE active = 1 ORDER BY id DESC LIMIT 1", fetch_one = True)
+        if not session:
+            await update.message.reply_text("No Active session")
+            return
 
-    if not session:
-        await update.message.reply_text("No Active session")
-        conn.close()
-        return
+        session_id = session[0]
+        db_manager.execute_query("UPDATE session SET active = 0 WHERE id = ?", (session_id,))
 
-    session_id = session[0]
-    cursor.execute("UPDATE session SET active = 0 WHERE id = ?", (session_id,))
+        consolidated_orders = db_manager.execute_query("""
+            SELECT plate, SUM(quantity) FROM orders
+         WHERE session_id = ?
+         GROUP BY plate
+        """, (session_id,))
 
-    cursor.execute("""
-        SELECT plate, SUM(quantity) FROM orders
-        WHERE session_id = ?
-        GROUP BY plate
-    """, (session_id,))
+        if not consolidated_orders:
+            await update.message.reply_text("No orders found!")
+            return
 
-    consolidated_orders = cursor.fetchall()
-    conn.commit()
-    conn.close()
+        message = f" **Orders summary for session {session_id}:**\n"
+        for plate, quantity in consolidated_orders:
+            message += f"- Plate {plate}: {quantity} times\n"
 
-    if not consolidated_orders:
-        await update.message.reply_text("No orders found!")
-        return
-
-    message = f" **Orders summary for session {session_id}:**\n"
-    for plate, quantity in consolidated_orders:
-        message += f"- Plate {plate}: {quantity} times\n"
-
-    await update.message.reply_text(message)
+        await update.message.reply_text(message)
 
 def main():
 
