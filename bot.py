@@ -66,7 +66,8 @@ def init_db(db):
         query_create = """
         CREATE TABLE IF NOT EXISTS session (
         id TEXT PRIMARY KEY,
-        active INTEGER DEFAULT 1)
+        active INTEGER DEFAULT 1,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)
         """
 
         db_manager.create_table(query_create)
@@ -145,6 +146,46 @@ async def close_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(message)
 
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    command = " ".join(context.args)
+    if len(command) == 0:
+        await update.message.reply_text("No Session ID provided!")
+        return
+
+    with DatabaseManager(db) as db_manager:
+        consolidated_orders = db_manager.execute_query("""
+            SELECT plate, SUM(quantity) FROM orders
+         WHERE session_id = ?
+         GROUP BY plate
+        """, (command,))
+
+        if not consolidated_orders:
+            await update.message.reply_text("No orders found!")
+            return
+
+        message = f" **Orders summary for session {command}:**\n"
+        for plate, quantity in consolidated_orders:
+            message += f"- Plate {plate}: {quantity} times\n"
+
+        await update.message.reply_text(message)
+
+async def list_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    with DatabaseManager(db) as db_manager:
+        sessions = db_manager.execute_query("SELECT id, active, timestamp FROM session ORDER BY timestamp DESC LIMIT 10")
+
+        if not sessions:
+            await update.message.reply_text("No sessions saved")
+            return
+
+        message = f"Last 10 sessions:\n\nid-active-timestamp\n"
+
+        for session in sessions:
+            id, active, timestamp = session
+            message += f"{id}-{active}-{timestamp}\n"
+
+        await update.message.reply_text(message)
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -167,6 +208,8 @@ def main():
     application.add_handler(CommandHandler("new_session", new_session))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, new_order))
     application.add_handler(CommandHandler("close_session", close_session))
+    application.add_handler(CommandHandler("list_sessions", list_sessions))
+    application.add_handler(CommandHandler("search", search))
 
 
     application.run_polling()
