@@ -9,7 +9,7 @@ This Telegram bot is your personal assistant for conquering all-you-can-eat (AYC
 * **📊 Statistics and Insights:** (Future Feature)  Uncover the secrets of your appetite!  Discover your most frequently ordered dishes, calculate your average consumption per session, and gain valuable insights into your eating patterns.
 * **🤖 User-Friendly Interface:** Communicate with the bot through a simple and intuitive Telegram interface.  Just use commands and let the bot do the rest!
 * **💾 Data Persistence:** Your valuable session data is stored securely, so you can track your progress over time and compare your current performance to your past triumphs. (SQLite Database)
-* **⌨️ Command Handling:**  Interact with the bot using Telegram commands.  `/start` your culinary journey, `/log` your delicious details, and `/history` your past feasts.
+* **⌨️ Command Handling:**  Interact with the bot using Telegram commands.  `/start` your culinary journey, session management, `/search` session details
 
 ## Getting Started
 
