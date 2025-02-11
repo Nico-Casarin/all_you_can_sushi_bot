@@ -28,18 +28,16 @@ This Telegram bot is your personal assistant for conquering all-you-can-eat (AYC
 
 ### Running the Bot
 
-`python bot.py`
+`python bot.py -t "TOKEN_ID" -o "DB_PATH`
 
 ### Usage
 
 Interact with the bot on Telegram using commands:
 
-* `/start`: Begin your AYCE journey!
-* `/log`: Record your delicious details.
-* `/history`: Review your past feasts.
-* `/help`: Get command assistance.
-* `/stats`: (Future) Analyze your eating habits.
-* `/delete`: (Future) Remove a session.
+* `/new_session`: Open a new session.
+* `/close_session`: Close a open session and print the orders.
+* * `/search`: Search a session by id.
+* `/list_sessions`: List the last 10 sessions.
 
 ## Contributing
 
