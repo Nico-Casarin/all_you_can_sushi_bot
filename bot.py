@@ -16,34 +16,65 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+class DatabaseManager:
+    def __init__(self, db_name):
+        self.db_name =  db_name
+        self.conn = None
+
+    def __enter__(self):
+        self.conn = sqlite3.connect(self.db_name)
+        self.cursor = self.conn.cursor()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.conn:
+            self.conn.close()
+
+    def execute_fetchall(self, query, params=()):
+        try:
+            self.cursor.execute(query, params)
+            return self.cursor.fetchall()
+        except sqlite3.Error as e:
+            print(f"SQLite error: {e}")
+            return None
+
+    def commit(self):
+        if self.conn:
+            self.conn.commit()
+
+    def create_table(self, query):
+        try:
+            self.cursor.execute(query)
+            self.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"SQLite error: {e}")
+            return False
+
 
 # Inizializza il database SQLite
 def init_db(db):
-    conn = sqlite3.connect(db)
-    cursor = conn.cursor()
-
-    cursor.execute("""
+    with DatabaseManager("orders.db") as db_manager:
+        query_create = """
         CREATE TABLE IF NOT EXISTS session (
-            id TEXT PRIMARY KEY,
-            active INTEGER DEFAULT 1
-        )
-    """)
+        id TEXT PRIMARY KEY,
+        active INTEGER DEFAULT 1)
+        """
 
-    cursor.execute("""
+        db_manager.create_table(query_create)
+
+        query_create= """
         CREATE TABLE IF NOT EXISTS orders (
-            session_id TEXT,
-            user TEXT,
-            plate INTEGER,
-            quantity INTEGER,
-            PRIMARY KEY (session_id, user, plate),
-            FOREIGN KEY (session_id) REFERENCES session(id)
-        )
-    """)
+        session_id TEXT,
+        user TEXT,
+        plate INTEGER,
+        quantity INTEGER,
+        PRIMARY KEY (session_id, user, plate),
+        FOREIGN KEY (session_id) REFERENCES session(id))
+        """
 
-    print('test')
+        db_manager.create_table(query_create)
 
-    conn.commit()
-    conn.close()
 
 async def new_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session_id = str(random.randint(10000, 99999))
