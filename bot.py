@@ -16,6 +16,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+# Class to simplify the management of the db interactions
 class DatabaseManager:
     def __init__(self, db_name):
         self.db_name =  db_name
@@ -60,7 +61,7 @@ class DatabaseManager:
             return False
 
 
-# Inizializza il database SQLite
+# Initialize SQLite db
 def init_db(db):
     with DatabaseManager(db) as db_manager:
         query_create = """
@@ -85,19 +86,21 @@ def init_db(db):
         db_manager.create_table(query_create)
 
 
+# Opening of a new "menu" session
 async def new_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session_id = str(random.randint(10000, 99999))
 
     with DatabaseManager(db) as db_manager:
         db_manager.execute_query("INSERT INTO session (id) VALUES (?)", (session_id,))
 
-    await update.message.reply_text(f"New session created! Session ID: {session_id}")
+    await update.message.reply_text(f"🍱 New session created! Session ID: {session_id}")
 
 async def new_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message.text.split()
 
+    # allowing only 2 numeric value as plate&quantiy input. all other elements return the function
     if len(msg) != 2 or not msg[0].isdigit() or not msg[1].isdigit():
-        await update.message.reply_text("Wrong fromat! Use: 'plate_number quantity'.")
+        await update.message.reply_text("ℹ️  Wrong fromat! Use: 'plate_number quantity'.")
         return
 
     plate, quantity = map(int, msg)
@@ -107,7 +110,7 @@ async def new_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session = db_manager.execute_query("SELECT id FROM session WHERE active = 1 ORDER BY id DESC LIMIT 1",
                                 fetch_one = True)
         if not session:
-            await update.message.reply_text("No active sessione. Wait for a new session")
+            await update.message.reply_text("ℹ️  No active sessione. Wait for a new session")
             return
 
         session_id = session[0]
@@ -117,14 +120,16 @@ async def new_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ON CONFLICT(session_id, user, plate) DO UPDATE SET quantity = quantity + ?
     """, (session_id, user, plate, quantity, quantity))
 
-        await update.message.reply_text(f"Order saved for plate n. {plate}")
+        await update.message.reply_text(f"🍣 Order saved for plate n. {plate}")
 
+
+# Closing open session and printing a summary of the orders
 async def close_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     with DatabaseManager(db) as db_manager:
         session = db_manager.execute_query("SELECT id FROM session WHERE active = 1 ORDER BY id DESC LIMIT 1", fetch_one = True)
         if not session:
-            await update.message.reply_text("No Active session")
+            await update.message.reply_text("🚨 No Active session")
             return
 
         session_id = session[0]
@@ -137,7 +142,7 @@ async def close_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (session_id,))
 
         if not consolidated_orders:
-            await update.message.reply_text("No orders found!")
+            await update.message.reply_text("🚨 No orders found!")
             return
 
         message = f" **Orders summary for session {session_id}:**\n"
@@ -146,11 +151,24 @@ async def close_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(message)
 
+# search session by id
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     command = " ".join(context.args)
     if len(command) == 0:
-        await update.message.reply_text("No Session ID provided!")
+        await update.message.reply_text("🚨 No Session ID provided!")
         return
+
+    command = command.split()
+
+    if len(command) != 1:
+        await update.message.reply_text("ℹ️  More than one ID provided. Only the first one will be used")
+
+    command = command[0]
+
+    if not command.isdigit():
+        await update.message.reply_text("🚨 ID must be a numeric")
+        return
+
 
     with DatabaseManager(db) as db_manager:
         consolidated_orders = db_manager.execute_query("""
@@ -160,22 +178,23 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (command,))
 
         if not consolidated_orders:
-            await update.message.reply_text("No orders found!")
+            await update.message.reply_text("😿 No orders found!")
             return
 
-        message = f" **Orders summary for session {command}:**\n"
+        message = f"🧮 **Orders summary for session {command}:**\n"
         for plate, quantity in consolidated_orders:
             message += f"- Plate {plate}: {quantity} times\n"
 
         await update.message.reply_text(message)
 
+# list recorded session
 async def list_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     with DatabaseManager(db) as db_manager:
         sessions = db_manager.execute_query("SELECT id, active, timestamp FROM session ORDER BY timestamp DESC LIMIT 10")
 
         if not sessions:
-            await update.message.reply_text("No sessions saved")
+            await update.message.reply_text("🙀 No sessions saved")
             return
 
         message = f"Last 10 sessions:\n\nid-active-timestamp\n"
@@ -186,6 +205,8 @@ async def list_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(message)
 
+
+# main program logic
 def main():
 
     parser = argparse.ArgumentParser()
